@@ -1,0 +1,18 @@
+[Unit]
+Description=VNC automation worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=@INSTALL_DIR@
+EnvironmentFile=@CONFIG_FILE@
+ExecStart=@INSTALL_DIR@/vnc_worker run
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

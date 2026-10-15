@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bundle_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+binary_source="$bundle_dir/dist/vnc_worker"
+config_source="$bundle_dir/vnc-worker.env"
+service_source="$bundle_dir/vnc-worker.service"
+install_dir="${VNC_BUILDER_INSTALL_DIR:-/opt/vnc_worker}"
+config_target="${VNC_BUILDER_CONFIG_FILE:-/etc/vnc-worker.env}"
+unit_target="${VNC_BUILDER_UNIT_FILE:-/etc/systemd/system/vnc-worker.service}"
+service_name="vnc-worker.service"
+systemctl_bin="${VNC_BUILDER_SYSTEMCTL:-systemctl}"
+journalctl_bin="${VNC_BUILDER_JOURNALCTL:-journalctl}"
+
+usage() {
+  cat <<'EOF'
+用法: ./install.sh {install|start|stop|restart|status|logs|uninstall} [--purge]
+
+  install    安装或更新二进制与 systemd 服务，并启动 Worker
+  start      启动服务
+  stop       停止服务
+  restart    重启服务（修改 /etc/vnc-worker.env 后使用）
+  status     查看服务状态
+  logs       实时查看 journal 日志
+  uninstall  停止并移除服务与二进制；默认保留配置和日志
+  --purge    仅用于 uninstall，同时删除 /etc/vnc-worker.env
+EOF
+}
+
+require_absolute_path() {
+  local value="$1" name="$2"
+  if [[ "$value" != /* || "$value" =~ [[:space:]] ]]; then
+    echo "$name 必须是没有空白字符的绝对路径: $value" >&2
+    exit 2
+  fi
+}
+
+require_config() {
+  local config_file="$1"
+  if [[ ! -f "$config_file" ]]; then
+    echo "缺少 $config_file；请先复制 vnc-worker.env.example 并填写真实配置。" >&2
+    exit 2
+  fi
+  for key in VNC_API_URL VNC_REDIS_URL VNC_WORKER_ID VNC_SLOT_COUNT VNC_MANAGER_SCRIPT VNC_SHARED_ROOT; do
+    if ! grep -Eq "^${key}=[^[:space:]]+" "$config_file"; then
+      echo "配置缺少 $key: $config_file" >&2
+      exit 2
+    fi
+  done
+}
+
+config_value() {
+  local key="$1" config_file="$2"
+  sed -n "s/^${key}=//p" "$config_file" | tail -n 1
+}
+
+install_worker() {
+  local manager_script shared_root
+  [[ -f "$binary_source" ]] || { echo "缺少 $binary_source" >&2; exit 2; }
+  [[ -x "$binary_source" ]] || { echo "可执行文件没有执行权限: $binary_source" >&2; exit 2; }
+  [[ -f "$service_source" ]] || { echo "缺少 $service_source" >&2; exit 2; }
+  if [[ ! -f "$config_target" ]]; then
+    require_config "$config_source"
+    install -d -m 755 "$(dirname "$config_target")"
+    install -m 600 "$config_source" "$config_target"
+  else
+    require_config "$config_target"
+    echo "保留已有配置: $config_target（修改后执行 restart）"
+  fi
+  manager_script="$(config_value VNC_MANAGER_SCRIPT "$config_target")"
+  shared_root="$(config_value VNC_SHARED_ROOT "$config_target")"
+  [[ -x "$manager_script" ]] || {
+    echo "VNC_MANAGER_SCRIPT 不存在或不可执行: $manager_script" >&2
+    exit 2
+  }
+  [[ -d "$shared_root" ]] || {
+    echo "VNC_SHARED_ROOT 不存在或未挂载: $shared_root" >&2
+    exit 2
+  }
+
+  install -d -m 755 "$install_dir"
+  # 先写临时文件再替换，避免覆盖正在运行的可执行文件。
+  install -m 755 "$binary_source" "$install_dir/.vnc_worker.new"
+  mv -f "$install_dir/.vnc_worker.new" "$install_dir/vnc_worker"
+  install -d -m 755 "$(dirname "$unit_target")"
+  sed \
+    -e "s|@INSTALL_DIR@|$install_dir|g" \
+    -e "s|@CONFIG_FILE@|$config_target|g" \
+    "$service_source" > "$unit_target"
+  chmod 644 "$unit_target"
+  "$systemctl_bin" daemon-reload
+  "$systemctl_bin" enable "$service_name"
+  "$systemctl_bin" restart "$service_name"
+  echo "已安装并启动 $service_name；查看状态: $0 status"
+}
+
+uninstall_worker() {
+  local purge="${1:-}"
+  if [[ "$purge" != "" && "$purge" != "--purge" ]]; then
+    usage >&2
+    exit 2
+  fi
+  if [[ -f "$unit_target" ]]; then
+    "$systemctl_bin" stop "$service_name"
+    "$systemctl_bin" disable "$service_name"
+    rm -f "$unit_target"
+    "$systemctl_bin" daemon-reload
+  fi
+  rm -f "$install_dir/vnc_worker"
+  if [[ "$purge" == "--purge" ]]; then
+    rm -f "$config_target"
+  fi
+  echo "已卸载 $service_name；任务报告、共享存储和日志未删除。"
+}
+
+require_absolute_path "$install_dir" "安装目录"
+require_absolute_path "$config_target" "配置文件路径"
+require_absolute_path "$unit_target" "服务文件路径"
+
+case "${1:-}" in
+  install) [[ "$#" -eq 1 ]] || { usage >&2; exit 2; }; install_worker ;;
+  start) [[ "$#" -eq 1 ]] || { usage >&2; exit 2; }; "$systemctl_bin" start "$service_name" ;;
+  stop) [[ "$#" -eq 1 ]] || { usage >&2; exit 2; }; "$systemctl_bin" stop "$service_name" ;;
+  restart) [[ "$#" -eq 1 ]] || { usage >&2; exit 2; }; "$systemctl_bin" restart "$service_name" ;;
+  status) [[ "$#" -eq 1 ]] || { usage >&2; exit 2; }; "$systemctl_bin" status --no-pager "$service_name" ;;
+  logs) [[ "$#" -eq 1 ]] || { usage >&2; exit 2; }; "$journalctl_bin" -u "$service_name" -f ;;
+  uninstall) [[ "$#" -le 2 ]] || { usage >&2; exit 2; }; uninstall_worker "${2:-}" ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
