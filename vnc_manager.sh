@@ -3,7 +3,7 @@ set -uo pipefail
 
 # TurboVNC 只管理单一 Linux 账号的 :1～:4，不负责安装和修改桌面配置。
 readonly VNCSERVER_BIN="${VNCSERVER_BIN:-/opt/TurboVNC/bin/vncserver}"
-readonly VNC_DESKTOP_USER="${VNC_DESKTOP_USER:-snskap}"
+readonly VNC_DESKTOP_USER="${VNC_DESKTOP_USER:-$(id -un)}"
 readonly MAX_DISPLAYS=4
 
 usage() {
@@ -43,25 +43,10 @@ lock_mutation() {
 }
 
 run_vncserver() {
-  local current_user home command argument
-  current_user="$(id -un)"
-  home="$(getent passwd "$VNC_DESKTOP_USER" | awk -F: '{print $6}')"
+  [[ "$(id -un)" == "$VNC_DESKTOP_USER" ]] \
+    || fail "请在 $VNC_DESKTOP_USER 账号的终端运行脚本，不支持切换用户"
+  "$VNCSERVER_BIN" "$@" 9<&-
 
-  if [[ "$current_user" == "$VNC_DESKTOP_USER" ]]; then
-    HOME="$home" USER="$VNC_DESKTOP_USER" LOGNAME="$VNC_DESKTOP_USER" \
-      "$VNCSERVER_BIN" "$@"
-    return
-  fi
-  [[ "${EUID:-$(id -u)}" -eq 0 ]] \
-    || fail "请使用 $VNC_DESKTOP_USER 或 root 运行脚本"
-
-  printf -v command '%q ' env "HOME=$home" "USER=$VNC_DESKTOP_USER" \
-    "LOGNAME=$VNC_DESKTOP_USER" "$VNCSERVER_BIN"
-  for argument in "$@"; do
-    printf -v argument '%q' "$argument"
-    command+="$argument "
-  done
-  su -s /bin/bash -c "$command" "$VNC_DESKTOP_USER"
 }
 
 is_xvnc_running() {

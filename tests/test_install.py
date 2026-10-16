@@ -19,16 +19,11 @@ def bundle(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     (work / "dist" / "vnc_worker").write_text("#!/bin/sh\nexit 0\n")
     (work / "dist" / "vnc_worker").chmod(0o755)
     manager = tmp_path / "scripts" / "vnc_manager.sh"
-    shared = tmp_path / "shared"
-    shared.mkdir()
     config = (source / "vnc-worker.env.example").read_text()
     config = config.replace(
         "VNC_MANAGER_SCRIPT=/opt/scripts/vnc_manager.sh",
         f"VNC_MANAGER_SCRIPT={manager}",
-    ).replace(
-        "VNC_SHARED_ROOT=/mnt/shared-tests",
-        f"VNC_SHARED_ROOT={shared}",
-    )
+    ).replace("VNC_LOG_DIR=/var/log/vnc-worker", f"VNC_LOG_DIR={tmp_path / 'logs'}")
     (work / "vnc-worker.env").write_text(config)
     systemctl = tmp_path / "fake-systemctl"
     systemctl.write_text('#!/bin/sh\necho "$@" >> "$SYSTEMCTL_CALLS"\n')
@@ -106,16 +101,17 @@ def test_install_rejects_missing_binary_and_required_config(
     assert not Path(env["VNC_BUILDER_UNIT_FILE"]).exists()
 
 
-def test_service_is_root_binary_unit_without_removed_settings(
+def test_service_uses_desktop_account_without_removed_settings(
     bundle: tuple[Path, dict[str, str]],
 ) -> None:
     assert run(bundle, "install").returncode == 0
     _, env = bundle
     unit = Path(env["VNC_BUILDER_UNIT_FILE"]).read_text()
     config = Path(env["VNC_BUILDER_CONFIG_FILE"]).read_text()
-    assert "User=root" in unit
+    assert "User=snskap" in unit
     assert "EnvironmentFile=" in unit
     assert "ExecStart=" in unit and "vnc_worker run" in unit
     assert "VNC_INTERNAL_TOKEN" not in config
+    assert "VNC_SHARED_ROOT" not in config
     assert "VNC_MODE" not in config
     assert "VNC_LEASE_SECONDS" not in config

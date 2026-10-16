@@ -22,12 +22,12 @@ cp vnc-worker.env.example vnc-worker.env
 vi vnc-worker.env
 ```
 
-每台物理机把 `VNC_WORKER_ID` 配置为自己的固定管理网 IP。确认共享存储已经挂载，并按实际环境填写桌面账号：
+每台物理机把 `VNC_WORKER_ID` 配置为自己的固定管理网 IP。按实际环境填写桌面账号和日志目录：
 
 ```text
 VNC_MANAGER_SCRIPT=/opt/scripts/vnc_manager.sh
 VNC_DESKTOP_USER=snskap
-VNC_SHARED_ROOT=/mnt/shared-tests
+VNC_LOG_DIR=/var/log/vnc-worker
 ```
 
 安装包包含生产版 `vnc_manager.sh`，安装时复制到上述路径。Worker 启动时会自动执行 `create -n VNC_SLOT_COUNT`，无需提前手工创建桌面。脚本只管理该账号的 `:1`～`:4`，不管理 Xorg `:0`、VirtualGL、Squish 或桌面静态配置。
@@ -65,7 +65,7 @@ sudo bash install.sh status
 sudo bash install.sh logs
 ```
 
-修改 `/etc/vnc-worker.env` 后执行 restart。注册冲突时，先确认旧 Worker 已退出，再调用调度服务：
+修改 `/etc/vnc-worker.env` 后执行 restart；修改 `VNC_DESKTOP_USER` 后重新执行 install，以同步 service 的 User 配置。注册冲突时，先确认旧 Worker 已退出，再调用调度服务：
 
 ```bash
 curl -X POST http://vnc-schedule:8088/api/v1/workers/192.168.10.21/unregister
@@ -86,7 +86,10 @@ sudo bash install.sh uninstall --purge
 
 ## 物理机准备
 
-- Worker 服务以 root 运行；任务单元通过 systemd `User=` 切换到 VNC 用户。
+- 服务 `KillMode=control-group` 会在停止服务时清理其所有子进程；若 VNC 也是该服务启动且仍在同一 cgroup 内，桌面会一起停止，下次启动时自动补齐。
+- 安装服务需要 sudo；安装后 Worker 使用 `VNC_DESKTOP_USER` 账号运行。Worker、VNC 和任务使用同一账号，运行中不调用 su 或 systemd-run。
+- 创建任务时传物理机上的绝对 `cwd`，不需要 `VNC_SHARED_ROOT`。桌面账号需能访问该目录及日志目录的父目录。安装器为该账号准备日志目录。
+- 服务日志位于 `VNC_LOG_DIR`，任务 stdout/stderr 位于其 `tasks/<任务ID>/<执行ID>/` 下，文件名带日期和分片号。
 - `/opt/scripts` 的目录权限由内网运维配置；安装器只把 `vnc_manager.sh` 文件设置为 `0755`。
 - `snskap` 的 `~/.vnc/xstartup` 必须预先配置。GNOME 环境使用包内 `xstartup.example`，按照 [GNOME 部署说明](GNOME部署说明.md) 手动替换并验证；脚本不会创建账号或修改该目录。
 - `/etc/vnc-worker.env` 使用 `root:root 0600`。
@@ -98,3 +101,9 @@ sudo bash install.sh uninstall --purge
 ```bash
 python3 -m pytest -q tests
 ```
+
+## 普通用户直接调试
+
+无需安装服务：以 VNC 桌面账号登录，把配置复制为运行目录下的 `.env`，填写当前账号，并将 `VNC_LOG_DIR` 改为 `./logs`，然后执行 `./dist/vnc_worker run`。不要同时启动安装服务和调试进程。
+
+任务使用独立进程组，任务脚本及 Squish/AUT 不应自行 daemonize/setsid 脱离；需要后台服务时由脚本显式管理停止。取消后检查 stdout、stderr 和进程清理结果。强制 kill 调试 Worker 后须人工确认旧任务已停止。

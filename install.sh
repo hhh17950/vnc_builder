@@ -42,7 +42,7 @@ require_config() {
     echo "缺少 $config_file；请先复制 vnc-worker.env.example 并填写真实配置。" >&2
     exit 2
   fi
-  for key in VNC_API_URL VNC_REDIS_URL VNC_WORKER_ID VNC_SLOT_COUNT VNC_MANAGER_SCRIPT VNC_DESKTOP_USER VNC_SHARED_ROOT; do
+  for key in VNC_API_URL VNC_REDIS_URL VNC_WORKER_ID VNC_SLOT_COUNT VNC_MANAGER_SCRIPT VNC_DESKTOP_USER VNC_LOG_DIR; do
     if ! grep -Eq "^${key}=[^[:space:]]+" "$config_file"; then
       echo "配置缺少 $key: $config_file" >&2
       exit 2
@@ -56,7 +56,7 @@ config_value() {
 }
 
 install_worker() {
-  local manager_script shared_root
+  local manager_script desktop_user log_dir
   [[ -f "$binary_source" ]] || { echo "缺少 $binary_source" >&2; exit 2; }
   [[ -x "$binary_source" ]] || { echo "可执行文件没有执行权限: $binary_source" >&2; exit 2; }
   [[ -f "$service_source" ]] || { echo "缺少 $service_source" >&2; exit 2; }
@@ -69,13 +69,19 @@ install_worker() {
     require_config "$config_target"
     echo "保留已有配置: $config_target（修改后执行 restart）"
   fi
+  desktop_user="$(config_value VNC_DESKTOP_USER "$config_target")"
+  [[ "$desktop_user" =~ ^[a-zA-Z_][a-zA-Z0-9_-]*$ ]] || { echo "无效桌面账号" >&2; exit 2; }
+  log_dir="$(config_value VNC_LOG_DIR "$config_target")"
+  require_absolute_path "$log_dir" "VNC_LOG_DIR"
+  # 安装需管理员权限；运行服务始终使用桌面账号。
+  mkdir -p "$log_dir/tasks"
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    chown "$desktop_user" "$log_dir" "$log_dir/tasks"
+    local worker_lock="$log_dir/$(config_value VNC_WORKER_ID "$config_target").lock"
+    [[ ! -f "$worker_lock" ]] || chown "$desktop_user" "$worker_lock"
+  fi
   manager_script="$(config_value VNC_MANAGER_SCRIPT "$config_target")"
-  shared_root="$(config_value VNC_SHARED_ROOT "$config_target")"
   require_absolute_path "$manager_script" "VNC_MANAGER_SCRIPT"
-  [[ -d "$shared_root" ]] || {
-    echo "VNC_SHARED_ROOT 不存在或未挂载: $shared_root" >&2
-    exit 2
-  }
 
   # 目录权限由内网运维统一管理；这里只安装脚本文件，不修改目录权限。
   mkdir -p "$(dirname "$manager_script")"
@@ -89,6 +95,7 @@ install_worker() {
   sed \
     -e "s|@INSTALL_DIR@|$install_dir|g" \
     -e "s|@CONFIG_FILE@|$config_target|g" \
+    -e "s|@DESKTOP_USER@|$desktop_user|g" \
     "$service_source" > "$unit_target"
   chmod 644 "$unit_target"
   "$systemctl_bin" daemon-reload
@@ -113,7 +120,7 @@ uninstall_worker() {
   if [[ "$purge" == "--purge" ]]; then
     rm -f "$config_target"
   fi
-  echo "已卸载 $service_name；任务报告、共享存储和日志未删除。"
+  echo "已卸载 $service_name；任务报告和日志未删除。"
 }
 
 require_absolute_path "$install_dir" "安装目录"

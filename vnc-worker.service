@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=root
+User=@DESKTOP_USER@
 WorkingDirectory=@INSTALL_DIR@
 EnvironmentFile=@CONFIG_FILE@
 ExecStart=@INSTALL_DIR@/vnc_worker run
