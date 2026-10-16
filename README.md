@@ -88,7 +88,7 @@ sudo bash install.sh uninstall --purge
 
 - Worker 服务以 root 运行；任务单元通过 systemd `User=` 切换到 VNC 用户。
 - `/opt/scripts` 的目录权限由内网运维配置；安装器只把 `vnc_manager.sh` 文件设置为 `0755`。
-- `snskap` 的 `~/.vnc/xstartup` 必须预先配置 XFCE 和 `xset` 防休眠；脚本不会创建账号或修改该目录。
+- `snskap` 的 `~/.vnc/xstartup` 必须预先配置。GNOME 环境使用包内 `xstartup.example`，按照 [GNOME 部署说明](GNOME部署说明.md) 手动替换并验证；脚本不会创建账号或修改该目录。
 - `/etc/vnc-worker.env` 使用 `root:root 0600`。
 - TurboVNC `xstartup` 和桌面 dconf 负责关闭锁屏、黑屏和休眠；Worker 只用 `xset q` 检查 DISPLAY。
 - Squish Server 端口由任务脚本管理，同一物理机上的并发任务必须避免端口冲突。

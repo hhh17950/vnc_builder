@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# 以 VNC 桌面所属用户运行，由 TurboVNC 提供 DISPLAY 和 Xauthority。
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+export VirtualGL_DIR=/opt/VirtualGL
+
+# 如内网需要原有 OPENBOX_DIR，请在此填写真实路径；留空使用系统目录。
+export OPENBOX_DIR=""
+if [ -n "$OPENBOX_DIR" ]; then
+    export XDG_DATA_DIRS="${OPENBOX_DIR}/share:/usr/share"
+    export XDG_CONFIG_DIRS="${OPENBOX_DIR}/etc/xdg:/etc/xdg"
+else
+    export XDG_DATA_DIRS=/usr/share
+    export XDG_CONFIG_DIRS=/etc/xdg
+fi
+
+# 仅设置 X11 层；GNOME 锁屏、空闲和电源策略需在部署阶段配置。
+# 不使用 set -e：Xvnc 不支持 DPMS 时保留诊断信息，继续启动桌面。
+xset s off
+xset s noblank
+xset -dpms
+
+# GNOME 是主会话，不能因 Nautilus 退出而终止桌面。
+# 本模板不自动启动 Nautilus，也不改变 GNOME 的 VirtualGL 加速方式。
+exec /usr/bin/dbus-launch --exit-with-session /usr/bin/gnome-session
