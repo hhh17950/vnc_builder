@@ -32,6 +32,8 @@ VNC_SHARED_ROOT=/mnt/shared-tests
 
 安装包包含生产版 `vnc_manager.sh`，安装时复制到上述路径。Worker 启动时会自动执行 `create -n VNC_SLOT_COUNT`，无需提前手工创建桌面。脚本只管理该账号的 `:1`～`:4`，不管理 Xorg `:0`、VirtualGL、Squish 或桌面静态配置。
 
+`create` 是幂等操作：先按目标用户和 DISPLAY 检查 Xvnc，只创建缺失桌面。Worker 每隔 `VNC_RECOVERY_INTERVAL_SECONDS` 检查空闲桌面并按需恢复；正常领取任务时不会执行创建操作。
+
 ## 3. 安装
 
 把整个 `vnc_builder` 目录复制到物理机，然后执行：

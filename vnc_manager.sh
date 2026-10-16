@@ -36,6 +36,12 @@ require_vncserver() {
   [[ -x "$VNCSERVER_BIN" ]] || fail "TurboVNC 程序不存在或不可执行: $VNCSERVER_BIN"
 }
 
+lock_mutation() {
+  # 锁定脚本自身，无需创建可能产生跨用户权限问题的锁文件。
+  exec 9<"${BASH_SOURCE[0]}" || fail "无法打开脚本锁"
+  flock -x 9 || fail "无法获取 VNC 管理锁"
+}
+
 run_vncserver() {
   local current_user home command argument
   current_user="$(id -un)"
@@ -59,10 +65,11 @@ run_vncserver() {
 }
 
 is_xvnc_running() {
-  local display="$1"
-  ps -eo comm=,args= | awk -v display="$display" '
-    $1 == "Xvnc" {
-      for (i = 2; i <= NF; i++) {
+  local display="$1" target_uid
+  target_uid="$(id -u "$VNC_DESKTOP_USER")"
+  ps -eo uid=,comm=,args= | awk -v uid="$target_uid" -v display="$display" '
+    $1 == uid && $2 == "Xvnc" {
+      for (i = 3; i <= NF; i++) {
         if ($i == display) {
           found = 1
           exit
@@ -109,7 +116,7 @@ list_desktops() {
 }
 
 create_desktops() {
-  local count="$MAX_DISPLAYS" number
+  local count="$MAX_DISPLAYS" number failed=0
   if [[ "$#" -gt 0 ]]; then
     [[ "$#" -eq 2 && "$1" == "-n" ]] || fail "create 只接受可选参数 -n 1-4"
     count="$2"
@@ -117,17 +124,23 @@ create_desktops() {
   [[ "$count" =~ ^[1-4]$ ]] || fail "-n 必须是 1 到 4 的整数"
   require_vnc_user
   require_vncserver
+  lock_mutation
 
   for number in $(seq 1 "$count"); do
-    # 已存在的会话由 vncserver 自行提示；继续处理其他 DISPLAY。
+    if is_xvnc_running ":$number"; then
+      echo ":$number 已运行，跳过" >&2
+      continue
+    fi
+    echo ":$number 未运行，开始创建" >&2
     run_vncserver ":$number" \
       -geometry 1920x1080 \
       -depth 24 \
       -localhost no \
       -nevershared \
-      -securitytypes none >&2 || true
+      -securitytypes none >&2 || failed=1
   done
   list_desktops
+  return "$failed"
 }
 
 stop_desktops() {
@@ -138,6 +151,7 @@ stop_desktops() {
   fi
   require_vnc_user
   require_vncserver
+  lock_mutation
 
   for display in "${displays[@]}"; do
     run_vncserver -kill "$display" >&2 || true

@@ -9,7 +9,9 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "vnc_manager.sh"
 
 
-def invoke(tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+def invoke(
+    tmp_path: Path, *args: str, running: tuple[str, ...] = (),
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     calls = tmp_path / "calls.log"
     calls.unlink(missing_ok=True)
     fake_bin = tmp_path / "bin"
@@ -23,6 +25,17 @@ def invoke(tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess[str]
         'fi\n'
     )
     getent.chmod(0o755)
+    flock = fake_bin / "flock"
+    flock.write_text("#!/bin/sh\nexit 0\n")
+    flock.chmod(0o755)
+    ps = fake_bin / "ps"
+    ps.write_text(
+        '#!/bin/sh\n'
+        'for display in $VNC_RUNNING_DISPLAYS; do\n'
+        '  echo "$VNC_TEST_UID Xvnc /opt/TurboVNC/bin/Xvnc $display"\n'
+        'done\n'
+    )
+    ps.chmod(0o755)
     server = tmp_path / "vncserver"
     server.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$VNC_CALLS"\n')
     server.chmod(0o755)
@@ -31,6 +44,8 @@ def invoke(tmp_path: Path, *args: str) -> tuple[subprocess.CompletedProcess[str]
         VNCSERVER_BIN=str(server),
         VNC_DESKTOP_USER=username,
         VNC_CALLS=str(calls),
+        VNC_RUNNING_DISPLAYS=" ".join(running),
+        VNC_TEST_UID=subprocess.check_output(["id", "-u"], text=True).strip(),
         PATH=f"{fake_bin}:{env['PATH']}",
     )
     result = subprocess.run(
@@ -68,6 +83,26 @@ def test_create_count_and_stop_modes(tmp_path: Path) -> None:
     result, calls = invoke(tmp_path, "stop")
     assert result.returncode == 0
     assert calls == ["-kill :1", "-kill :2", "-kill :3", "-kill :4"]
+
+
+def test_create_skips_running_desktops(tmp_path: Path) -> None:
+    result, calls = invoke(tmp_path, "create", "-n", "4", running=(":1", ":3"))
+    assert result.returncode == 0
+    assert [call.split()[0] for call in calls] == [":2", ":4"]
+    assert ":1 已运行，跳过" in result.stderr
+    assert ":2 未运行，开始创建" in result.stderr
+    rows = json.loads(result.stdout)
+    assert [row["state"] for row in rows] == [
+        "running", "stopped", "running", "stopped",
+    ]
+
+
+def test_repeated_create_with_all_desktops_running_does_nothing(tmp_path: Path) -> None:
+    result, calls = invoke(
+        tmp_path, "create", "-n", "4", running=(":1", ":2", ":3", ":4"),
+    )
+    assert result.returncode == 0
+    assert calls == []
 
 
 def test_rejects_out_of_range_display(tmp_path: Path) -> None:
