@@ -5,6 +5,7 @@ bundle_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 binary_source="$bundle_dir/dist/vnc_worker"
 config_source="$bundle_dir/vnc-worker.env"
 service_source="$bundle_dir/vnc-worker.service"
+manager_source="$bundle_dir/vnc_manager.sh"
 install_dir="${VNC_BUILDER_INSTALL_DIR:-/opt/vnc_worker}"
 config_target="${VNC_BUILDER_CONFIG_FILE:-/etc/vnc-worker.env}"
 unit_target="${VNC_BUILDER_UNIT_FILE:-/etc/systemd/system/vnc-worker.service}"
@@ -41,7 +42,7 @@ require_config() {
     echo "缺少 $config_file；请先复制 vnc-worker.env.example 并填写真实配置。" >&2
     exit 2
   fi
-  for key in VNC_API_URL VNC_REDIS_URL VNC_WORKER_ID VNC_SLOT_COUNT VNC_MANAGER_SCRIPT VNC_SHARED_ROOT; do
+  for key in VNC_API_URL VNC_REDIS_URL VNC_WORKER_ID VNC_SLOT_COUNT VNC_MANAGER_SCRIPT VNC_DESKTOP_USER VNC_SHARED_ROOT; do
     if ! grep -Eq "^${key}=[^[:space:]]+" "$config_file"; then
       echo "配置缺少 $key: $config_file" >&2
       exit 2
@@ -59,6 +60,7 @@ install_worker() {
   [[ -f "$binary_source" ]] || { echo "缺少 $binary_source" >&2; exit 2; }
   [[ -x "$binary_source" ]] || { echo "可执行文件没有执行权限: $binary_source" >&2; exit 2; }
   [[ -f "$service_source" ]] || { echo "缺少 $service_source" >&2; exit 2; }
+  [[ -f "$manager_source" ]] || { echo "缺少 $manager_source" >&2; exit 2; }
   if [[ ! -f "$config_target" ]]; then
     require_config "$config_source"
     install -d -m 755 "$(dirname "$config_target")"
@@ -69,14 +71,15 @@ install_worker() {
   fi
   manager_script="$(config_value VNC_MANAGER_SCRIPT "$config_target")"
   shared_root="$(config_value VNC_SHARED_ROOT "$config_target")"
-  [[ -x "$manager_script" ]] || {
-    echo "VNC_MANAGER_SCRIPT 不存在或不可执行: $manager_script" >&2
-    exit 2
-  }
+  require_absolute_path "$manager_script" "VNC_MANAGER_SCRIPT"
   [[ -d "$shared_root" ]] || {
     echo "VNC_SHARED_ROOT 不存在或未挂载: $shared_root" >&2
     exit 2
   }
+
+  # 目录权限由内网运维统一管理；这里只安装脚本文件，不修改目录权限。
+  mkdir -p "$(dirname "$manager_script")"
+  install -m 755 "$manager_source" "$manager_script"
 
   install -d -m 755 "$install_dir"
   # 先写临时文件再替换，避免覆盖正在运行的可执行文件。

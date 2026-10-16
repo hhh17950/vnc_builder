@@ -22,14 +22,15 @@ cp vnc-worker.env.example vnc-worker.env
 vi vnc-worker.env
 ```
 
-每台物理机把 `VNC_WORKER_ID` 配置为自己的固定管理网 IP。确认以下两项已经存在：
+每台物理机把 `VNC_WORKER_ID` 配置为自己的固定管理网 IP。确认共享存储已经挂载，并按实际环境填写桌面账号：
 
 ```text
-VNC_MANAGER_SCRIPT=/opt/vnc_manager/vnc_manager.sh
+VNC_MANAGER_SCRIPT=/opt/scripts/vnc_manager.sh
+VNC_DESKTOP_USER=snskap
 VNC_SHARED_ROOT=/mnt/shared-tests
 ```
 
-Worker 启动时会自动执行 `vnc_manager.sh create -n VNC_SLOT_COUNT`，无需提前手工创建桌面。
+安装包包含生产版 `vnc_manager.sh`，安装时复制到上述路径。Worker 启动时会自动执行 `create -n VNC_SLOT_COUNT`，无需提前手工创建桌面。脚本只管理该账号的 `:1`～`:4`，不管理 Xorg `:0`、VirtualGL、Squish 或桌面静态配置。
 
 ## 3. 安装
 
@@ -39,7 +40,18 @@ Worker 启动时会自动执行 `vnc_manager.sh create -n VNC_SLOT_COUNT`，无�
 sudo bash install.sh install
 ```
 
-程序安装到 `/opt/vnc_worker/vnc_worker`，配置安装到 `/etc/vnc-worker.env`，服务名称为 `vnc-worker.service`。重复执行 install 会更新程序并保留现有配置。
+程序安装到 `/opt/vnc_worker/vnc_worker`，VNC 脚本安装到 `/opt/scripts/vnc_manager.sh`，配置安装到 `/etc/vnc-worker.env`，服务名称为 `vnc-worker.service`。重复执行 install 会更新程序和 VNC 脚本，并保留现有配置。
+
+也可以独立检查 VNC 桌面：
+
+```bash
+bash /opt/scripts/vnc_manager.sh create
+bash /opt/scripts/vnc_manager.sh list
+bash /opt/scripts/vnc_manager.sh stop :2
+bash /opt/scripts/vnc_manager.sh stop
+```
+
+`list` 在终端展示 X11 套接字、Xvnc 和 Xorg 清单，stdout 只输出 Worker 可解析的 JSON。
 
 ## 4. 日常操作
 
@@ -64,7 +76,7 @@ sudo bash install.sh restart
 sudo bash install.sh uninstall
 ```
 
-默认保留 `/etc/vnc-worker.env`、日志和任务报告。连配置一起删除：
+默认保留 `/etc/vnc-worker.env`、`/opt/scripts/vnc_manager.sh`、日志和任务报告。连 Worker 配置一起删除：
 
 ```bash
 sudo bash install.sh uninstall --purge
@@ -73,7 +85,8 @@ sudo bash install.sh uninstall --purge
 ## 物理机准备
 
 - Worker 服务以 root 运行；任务单元通过 systemd `User=` 切换到 VNC 用户。
-- `vnc_manager.sh` 使用 `root:root 0755`，`/etc/vnc_manage` 使用 `0755`，配置使用 `0644`，不要设置 777。
+- `/opt/scripts` 的目录权限由内网运维配置；安装器只把 `vnc_manager.sh` 文件设置为 `0755`。
+- `snskap` 的 `~/.vnc/xstartup` 必须预先配置 XFCE 和 `xset` 防休眠；脚本不会创建账号或修改该目录。
 - `/etc/vnc-worker.env` 使用 `root:root 0600`。
 - TurboVNC `xstartup` 和桌面 dconf 负责关闭锁屏、黑屏和休眠；Worker 只用 `xset q` 检查 DISPLAY。
 - Squish Server 端口由任务脚本管理，同一物理机上的并发任务必须避免端口冲突。

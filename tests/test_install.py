@@ -15,16 +15,15 @@ def bundle(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     (work / "dist").mkdir(parents=True)
     shutil.copy2(source / "install.sh", work / "install.sh")
     shutil.copy2(source / "vnc-worker.service", work / "vnc-worker.service")
+    shutil.copy2(source / "vnc_manager.sh", work / "vnc_manager.sh")
     (work / "dist" / "vnc_worker").write_text("#!/bin/sh\nexit 0\n")
     (work / "dist" / "vnc_worker").chmod(0o755)
-    manager = tmp_path / "vnc_manager.sh"
-    manager.write_text("#!/bin/sh\nexit 0\n")
-    manager.chmod(0o755)
+    manager = tmp_path / "scripts" / "vnc_manager.sh"
     shared = tmp_path / "shared"
     shared.mkdir()
     config = (source / "vnc-worker.env.example").read_text()
     config = config.replace(
-        "VNC_MANAGER_SCRIPT=/opt/vnc_manager/vnc_manager.sh",
+        "VNC_MANAGER_SCRIPT=/opt/scripts/vnc_manager.sh",
         f"VNC_MANAGER_SCRIPT={manager}",
     ).replace(
         "VNC_SHARED_ROOT=/mnt/shared-tests",
@@ -68,6 +67,13 @@ def test_install_update_status_and_uninstall(bundle: tuple[Path, dict[str, str]]
     config = Path(env["VNC_BUILDER_CONFIG_FILE"])
     unit = Path(env["VNC_BUILDER_UNIT_FILE"])
     assert installed.is_file()
+    manager = Path(next(
+        line.split("=", 1)[1]
+        for line in config.read_text().splitlines()
+        if line.startswith("VNC_MANAGER_SCRIPT=")
+    ))
+    assert manager.is_file()
+    assert manager.stat().st_mode & 0o777 == 0o755
     assert config.stat().st_mode & 0o777 == 0o600
     assert f"ExecStart={installed} run" in unit.read_text()
 
