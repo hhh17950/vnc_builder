@@ -100,7 +100,6 @@ create_desktops() {
     if ! "$VNCSERVER_BIN" ":$number" \
         -geometry 1920x1080 \
         -depth 24 \
-        -localhost no \
         -nevershared \
         -securitytypes none >&2; then
       echo ":$number 创建失败" >&2

@@ -62,7 +62,7 @@ def test_create_defaults_to_four_and_returns_json(tmp_path: Path) -> None:
     result, calls = invoke(tmp_path, "create")
     assert result.returncode == 0
     assert len(calls) == 4
-    assert calls[0] == ":1 -geometry 1920x1080 -depth 24 -localhost no -nevershared -securitytypes none"
+    assert calls[0] == ":1 -geometry 1920x1080 -depth 24 -nevershared -securitytypes none"
     assert calls[-1].startswith(":4 ")
     rows = json.loads(result.stdout)
     assert [row["display"] for row in rows] == [":1", ":2", ":3", ":4"]
