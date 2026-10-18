@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-# TurboVNC 只管理单一 Linux 账号的 :1～:4，不负责安装和修改桌面配置。
+# TurboVNC 单账号多桌面管理：只负责当前账号 :1～:4 的创建、查询、停止。
+# 不涉及账号切换、调度授权、锁屏策略、VirtualGL 或 Squish。
 readonly VNCSERVER_BIN="${VNCSERVER_BIN:-/opt/TurboVNC/bin/vncserver}"
-readonly VNC_DESKTOP_USER="${VNC_DESKTOP_USER:-$(id -un)}"
 readonly MAX_DISPLAYS=4
+readonly VNC_USER="$(id -un)"
+readonly VNC_UID="$(id -u)"
+readonly VNC_GROUP="$(id -gn)"
 
 usage() {
   cat <<'EOF'
 用法:
-  bash /opt/scripts/vnc_manager.sh create [-n 1-4]
-  bash /opt/scripts/vnc_manager.sh list
-  bash /opt/scripts/vnc_manager.sh stop [:[1-4]]
-  bash /opt/scripts/vnc_manager.sh help
+  bash vnc_manager.sh create [-n 1-4]
+  bash vnc_manager.sh list
+  bash vnc_manager.sh stop [:[1-4]]
+  bash vnc_manager.sh help
 
 示例:
-  bash /opt/scripts/vnc_manager.sh create
-  bash /opt/scripts/vnc_manager.sh create -n 4
-  bash /opt/scripts/vnc_manager.sh stop :2
-  bash /opt/scripts/vnc_manager.sh stop
+  bash vnc_manager.sh create
+  bash vnc_manager.sh create -n 4
+  bash vnc_manager.sh stop :2
+  bash vnc_manager.sh stop
 EOF
 }
 
@@ -27,32 +30,13 @@ fail() {
   exit 2
 }
 
-require_vnc_user() {
-  getent passwd "$VNC_DESKTOP_USER" >/dev/null 2>&1 \
-    || fail "Linux 用户不存在: $VNC_DESKTOP_USER"
-}
-
 require_vncserver() {
   [[ -x "$VNCSERVER_BIN" ]] || fail "TurboVNC 程序不存在或不可执行: $VNCSERVER_BIN"
 }
 
-lock_mutation() {
-  # 锁定脚本自身，无需创建可能产生跨用户权限问题的锁文件。
-  exec 9<"${BASH_SOURCE[0]}" || fail "无法打开脚本锁"
-  flock -x 9 || fail "无法获取 VNC 管理锁"
-}
-
-run_vncserver() {
-  [[ "$(id -un)" == "$VNC_DESKTOP_USER" ]] \
-    || fail "请在 $VNC_DESKTOP_USER 账号的终端运行脚本，不支持切换用户"
-  "$VNCSERVER_BIN" "$@" 9<&-
-
-}
-
 is_xvnc_running() {
-  local display="$1" target_uid
-  target_uid="$(id -u "$VNC_DESKTOP_USER")"
-  ps -eo uid=,comm=,args= | awk -v uid="$target_uid" -v display="$display" '
+  local display="$1"
+  ps -eo uid=,comm=,args= | awk -v uid="$VNC_UID" -v display="$display" '
     $1 == uid && $2 == "Xvnc" {
       for (i = 3; i <= NF; i++) {
         if ($i == display) {
@@ -82,9 +66,7 @@ print_inventory() {
 }
 
 list_desktops() {
-  local group number state separator=""
-  require_vnc_user
-  group="$(id -gn "$VNC_DESKTOP_USER")"
+  local number state separator=""
   print_inventory
 
   printf '['
@@ -94,22 +76,20 @@ list_desktops() {
       state="running"
     fi
     printf '%s{"user":"%s","group":"%s","display":":%d","state":"%s"}' \
-      "$separator" "$VNC_DESKTOP_USER" "$group" "$number" "$state"
+      "$separator" "$VNC_USER" "$VNC_GROUP" "$number" "$state"
     separator=','
   done
   printf ']\n'
 }
 
 create_desktops() {
-  local count="$MAX_DISPLAYS" number failed=0
+  local count="$MAX_DISPLAYS" number
   if [[ "$#" -gt 0 ]]; then
     [[ "$#" -eq 2 && "$1" == "-n" ]] || fail "create 只接受可选参数 -n 1-4"
     count="$2"
   fi
   [[ "$count" =~ ^[1-4]$ ]] || fail "-n 必须是 1 到 4 的整数"
-  require_vnc_user
   require_vncserver
-  lock_mutation
 
   for number in $(seq 1 "$count"); do
     if is_xvnc_running ":$number"; then
@@ -117,15 +97,18 @@ create_desktops() {
       continue
     fi
     echo ":$number 未运行，开始创建" >&2
-    run_vncserver ":$number" \
-      -geometry 1920x1080 \
-      -depth 24 \
-      -localhost no \
-      -nevershared \
-      -securitytypes none >&2 || failed=1
+    if ! "$VNCSERVER_BIN" ":$number" \
+        -geometry 1920x1080 \
+        -depth 24 \
+        -localhost no \
+        -nevershared \
+        -securitytypes none >&2; then
+      echo ":$number 创建失败" >&2
+      list_desktops
+      return 1
+    fi
   done
   list_desktops
-  return "$failed"
 }
 
 stop_desktops() {
@@ -134,12 +117,10 @@ stop_desktops() {
     [[ "$#" -eq 1 && "$1" =~ ^:[1-4]$ ]] || fail "display 必须是 :1、:2、:3 或 :4"
     displays=("$1")
   fi
-  require_vnc_user
   require_vncserver
-  lock_mutation
 
   for display in "${displays[@]}"; do
-    run_vncserver -kill "$display" >&2 || true
+    "$VNCSERVER_BIN" -kill "$display" >&2 || true
   done
   list_desktops
 }

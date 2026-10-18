@@ -74,11 +74,9 @@ install_worker() {
   log_dir="$(config_value VNC_LOG_DIR "$config_target")"
   require_absolute_path "$log_dir" "VNC_LOG_DIR"
   # 安装需管理员权限；运行服务始终使用桌面账号。
-  mkdir -p "$log_dir/tasks"
+  mkdir -p "$log_dir"
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-    chown "$desktop_user" "$log_dir" "$log_dir/tasks"
-    local worker_lock="$log_dir/$(config_value VNC_WORKER_ID "$config_target").lock"
-    [[ ! -f "$worker_lock" ]] || chown "$desktop_user" "$worker_lock"
+    chown "$desktop_user" "$log_dir"
   fi
   manager_script="$(config_value VNC_MANAGER_SCRIPT "$config_target")"
   require_absolute_path "$manager_script" "VNC_MANAGER_SCRIPT"

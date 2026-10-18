@@ -20,7 +20,6 @@
 3. 同一用户先重建一个桌面：
 
    ```bash
-   export VNC_DESKTOP_USER=snskap
    bash /opt/scripts/vnc_manager.sh stop :1
    bash /opt/scripts/vnc_manager.sh create -n 1
    ```
