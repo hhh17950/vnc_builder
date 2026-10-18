@@ -6,7 +6,7 @@
 2. 确认 `vnc_manager.sh create -n N`、`list`、`stop :N` 和无参数 `stop` 可用。
 3. 重复执行 `create -n 4`，确认已运行 DISPLAY 被跳过；手工停止一个空闲 DISPLAY，确认 Worker 定时恢复后重新变为 `idle`。
 4. 确认任务 cwd 是实际存在的绝对路径，VNC 用户能访问该目录及 VNC_LOG_DIR 的父目录，任务结果目录由当前账号的 Worker 创建。
-5. 使用 `vnc_build/install.sh install` 安装 Worker。
+5. 使用 `vnc_builder/install.sh install` 安装 Worker。
 
 ## VNC 与防锁屏
 

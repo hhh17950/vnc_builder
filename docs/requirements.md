@@ -39,7 +39,7 @@
 
 ## 本次仓库交付要求
 
-三个 GitHub 仓库命名 vnc_schdule_api、vnc_worker、vnc_build；各项目根目录只保留一个 README.md，描述结构和启动方式；系统级文档统一放在 vnc_build/docs/。上传源码、测试、迁移、必要静态资源及配置模板，不上传真实配置、凭据、缓存、日志、构建产物和虚拟机文件。
+三个 GitHub 仓库命名 vnc_schdule_api、vnc_worker、vnc_builder；各项目根目录只保留一个 README.md，描述结构和启动方式；系统级文档统一放在 vnc_builder/docs/。上传源码、测试、迁移、必要静态资源及配置模板，不上传真实配置、凭据、缓存、日志、构建产物和虚拟机文件。
 
 ## 范围外
 

@@ -1,6 +1,6 @@
-# vnc_build
+# vnc_builder
 
-Worker 的 Linux 安装包与系统文档仓库，原本地目录名为 `vnc_builder`。仓库不包含 ISO、RPM、虚拟机磁盘、许可证或已构建二进制。
+Worker 的 Linux 安装包与系统文档仓库，仓库不包含 ISO、RPM、虚拟机磁盘、许可证或已构建二进制。
 
 ## 基础结构
 
@@ -20,7 +20,7 @@ tests/                    安装器与 VNC 脚本测试
 先在兼容 CentOS 7 的 Linux 构建环境生成 `vnc_worker/dist/vnc_worker`，然后：
 
 ```bash
-# 三个仓库按同级目录检出；在 vnc_build 根目录执行。
+# 三个仓库按同级目录检出；在 vnc_builder 根目录执行。
 cp ../vnc_worker/dist/vnc_worker dist/vnc_worker
 cp vnc-worker.env.example vnc-worker.env
 # 编辑服务地址、唯一 Worker ID、桌面账号和日志目录。

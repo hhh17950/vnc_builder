@@ -1,9 +1,9 @@
-> 历史归档：保留需求演进和实施背景。路径已统一为 vnc_build；当前行为以 ../architecture.md 和源码为准。文中的提交号、测试数量和交付包不是本次发布记录。
+> 历史归档：保留需求演进和实施背景。路径已统一为 vnc_builder；当前行为以 ../architecture.md 和源码为准。文中的提交号、测试数量和交付包不是本次发布记录。
 
 # 本次实施计划：任务链路简化 + 日志上传
 
 > 日期：2026-10-16
-> 范围：`vnc_schdule_api`、`vnc_worker`，少量 `vnc_build` 与文档
+> 范围：`vnc_schdule_api`、`vnc_worker`，少量 `vnc_builder` 与文档
 > 背景：在「一个任务只执行一次、失联不 requeue」的前提下，收敛任务状态机，去掉 attempt 层与冗余字段，新增任务日志上传到 file_management 服务
 
 ---

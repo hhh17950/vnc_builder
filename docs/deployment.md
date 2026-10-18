@@ -1,6 +1,6 @@
 # 部署与运行维护
 
-更新：2026-10-18。仓库同级目录为 vnc_schdule_api、vnc_worker、vnc_build。软件安装与真实桌面验收尚未在本次文档整理中执行。
+更新：2026-10-18。仓库同级目录为 vnc_schdule_api、vnc_worker、vnc_builder。软件安装与真实桌面验收尚未在本次文档整理中执行。
 
 ## 1. 准备与启动顺序
 
@@ -41,8 +41,8 @@ Compose 的数据库、Redis 和 API 端口只绑定 127.0.0.1。若 Worker 在�
 以桌面账号验证：
 
 ```bash
-bash /path/to/vnc_build/vnc_manager.sh create -n 2
-bash /path/to/vnc_build/vnc_manager.sh list
+bash /path/to/vnc_builder/vnc_manager.sh create -n 2
+bash /path/to/vnc_builder/vnc_manager.sh list
 DISPLAY=:1 xset q
 DISPLAY=:2 xset q
 ```
@@ -58,8 +58,8 @@ cd vnc_worker
 python3.10 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt -r requirements-build.txt
 scripts/build_executable.sh
-cp dist/vnc_worker ../vnc_build/dist/vnc_worker
-cd ../vnc_build
+cp dist/vnc_worker ../vnc_builder/dist/vnc_worker
+cd ../vnc_builder
 cp vnc-worker.env.example vnc-worker.env
 # 编辑配置后：
 sudo bash install.sh install
