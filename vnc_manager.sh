@@ -3,6 +3,13 @@ set -uo pipefail
 
 # TurboVNC 单账号多桌面管理：只负责当前账号 :1～:4 的创建、查询、停止。
 # 不涉及账号切换、调度授权、锁屏策略、VirtualGL 或 Squish。
+#
+# 不继承调用者的 XAUTHORITY：vncserver 会直接把该变量当作 VNC 的认证文件
+# （vncserver 内 $xauthorityFile = $ENV{XAUTHORITY}）。从 GDM 桌面终端运行时，
+# 它指向 /run/gdm/auth-for-<user>-*/database，该文件由 GDM 管理且会轮换，
+# xauth 写入时可能长时间等锁，导致 create 看起来卡住。unset 后 vncserver
+# 会回退到 ~/.Xauthority。
+unset XAUTHORITY
 readonly VNCSERVER_BIN="${VNCSERVER_BIN:-/opt/TurboVNC/bin/vncserver}"
 readonly MAX_DISPLAYS=4
 readonly VNC_USER="$(id -un)"
